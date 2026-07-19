@@ -16,6 +16,7 @@ services:
       # Render provides PORT automatically; the server reads process.env.PORT.
       - key: REDIS_URL
         fromService:
+          type: keyvalue
           name: rtide-redis
           property: connectionString
 
