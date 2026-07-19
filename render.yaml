@@ -1,0 +1,28 @@
+# Render blueprint: WebSocket server + managed Redis (Key Value).
+# Deploy by pushing this repo and choosing "New > Blueprint" in the Render dashboard.
+services:
+  - type: web
+    name: rtide-server
+    runtime: node
+    plan: free
+    # Build only the server workspace.
+    buildCommand: npm install && npm run build --workspace server
+    startCommand: npm run start --workspace server
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Render sets PORT automatically; the server reads process.env.PORT.
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: rtide-redis
+          property: connectionString
+
+# Managed Redis for cross-instance Pub/Sub fan-out.
+# Enables horizontal scaling: bump the server's instance count and edits still sync.
+keyValue:
+  - name: rtide-redis
+    plan: free
+    maxmemoryPolicy: noeviction
+    ipAllowList: []   # only allow internal (Render service-to-service) connections

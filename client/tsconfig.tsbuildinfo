@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/collab/session.ts","./src/collab/usecollab.ts","./src/collab/user.ts","./src/components/editor.tsx","./src/components/filetree.tsx","./src/components/presence.tsx","./vite.config.ts"],"version":"5.9.3"}

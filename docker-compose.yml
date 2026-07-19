@@ -1,0 +1,38 @@
+# Local multi-instance setup that PROVES the Redis Pub/Sub fan-out.
+#
+#   docker compose up --build
+#
+# Then run two clients pointed at the two different server ports:
+#   client A -> ws://localhost:1234   (VITE_WS_URL)
+#   client B -> ws://localhost:1235
+# Edits made on A appear on B even though they're on separate server processes,
+# because every edit is fanned out through Redis.
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  server-a:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    environment:
+      PORT: "1234"
+      REDIS_URL: "redis://redis:6379"
+    ports:
+      - "1234:1234"
+    depends_on:
+      - redis
+
+  server-b:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    environment:
+      PORT: "1235"
+      REDIS_URL: "redis://redis:6379"
+    ports:
+      - "1235:1235"
+    depends_on:
+      - redis
