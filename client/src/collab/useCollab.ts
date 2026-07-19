@@ -1,6 +1,10 @@
 /**
  * useCollab — owns the Y.Doc + WebSocket provider for a room and exposes
  * reactive views of the shared state (connection status, file list, peers).
+ *
+ * The provider is created AND destroyed inside a single effect. This is what
+ * makes it survive React 18 StrictMode's mount → unmount → remount cycle in dev:
+ * each mount builds a fresh provider, so a torn-down socket is never reused.
  */
 import { useEffect, useMemo, useState } from 'react';
 import * as Y from 'yjs';
@@ -15,11 +19,14 @@ export interface Peer extends UserIdentity {
   isSelf: boolean;
 }
 
+export type Status = 'connecting' | 'connected' | 'disconnected';
+
 export interface Collab {
-  doc: Y.Doc;
-  provider: WebsocketProvider;
+  /** doc + provider are null until the effect has created them (first paint). */
+  doc: Y.Doc | null;
+  provider: WebsocketProvider | null;
   identity: UserIdentity;
-  status: 'connecting' | 'connected' | 'disconnected';
+  status: Status;
   files: FileMeta[];
   peers: Peer[];
 }
@@ -27,24 +34,23 @@ export interface Collab {
 export function useCollab(room: string): Collab {
   const identity = useMemo(() => getUserIdentity(), []);
 
-  // Create the doc + provider exactly once per room.
-  const { doc, provider } = useMemo(() => {
-    const doc = new Y.Doc();
-    const provider = new WebsocketProvider(WS_URL, room, doc, { connect: true });
-    provider.awareness.setLocalStateField('user', identity);
-    return { doc, provider };
-  }, [room, identity]);
-
-  const [status, setStatus] = useState<Collab['status']>('connecting');
+  const [doc, setDoc] = useState<Y.Doc | null>(null);
+  const [provider, setProvider] = useState<WebsocketProvider | null>(null);
+  const [status, setStatus] = useState<Status>('connecting');
   const [files, setFiles] = useState<FileMeta[]>([]);
   const [peers, setPeers] = useState<Peer[]>([]);
 
   useEffect(() => {
-    const onStatus = (e: { status: 'connecting' | 'connected' | 'disconnected' }) =>
-      setStatus(e.status);
+    const doc = new Y.Doc();
+    const provider = new WebsocketProvider(WS_URL, room, doc, { connect: true });
+    provider.awareness.setLocalStateField('user', identity);
+    setDoc(doc);
+    setProvider(provider);
+
+    const onStatus = (e: { status: Status }) => setStatus(e.status);
     provider.on('status', onStatus);
 
-    // Once we're synced, make sure the room has at least the welcome file.
+    // Once synced, make sure the room has at least the welcome file.
     const onSync = (isSynced: boolean) => {
       if (isSynced) ensureSeedFiles(doc);
     };
@@ -75,16 +81,13 @@ export function useCollab(room: string): Collab {
       provider.off('sync', onSync);
       doc.getMap('files').unobserve(refreshFiles);
       provider.awareness.off('change', refreshPeers);
-    };
-  }, [doc, provider]);
-
-  // Tear down when the room changes or the component unmounts.
-  useEffect(() => {
-    return () => {
       provider.destroy();
       doc.destroy();
+      setDoc(null);
+      setProvider(null);
+      setStatus('connecting');
     };
-  }, [doc, provider]);
+  }, [room, identity]);
 
   return { doc, provider, identity, status, files, peers };
 }

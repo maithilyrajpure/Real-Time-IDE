@@ -13,9 +13,22 @@ import { EditorView, keymap, lineNumbers, highlightActiveLine } from '@codemirro
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { javascript } from '@codemirror/lang-javascript';
 import { python } from '@codemirror/lang-python';
+import { java } from '@codemirror/lang-java';
+import { cpp } from '@codemirror/lang-cpp';
+import { rust } from '@codemirror/lang-rust';
+import { php } from '@codemirror/lang-php';
+import { html } from '@codemirror/lang-html';
+import { css } from '@codemirror/lang-css';
+import { json } from '@codemirror/lang-json';
+import { markdown } from '@codemirror/lang-markdown';
+import { xml } from '@codemirror/lang-xml';
+import { yaml } from '@codemirror/lang-yaml';
+import { sql } from '@codemirror/lang-sql';
 import { oneDark } from '@codemirror/theme-one-dark';
+import type { Extension } from '@codemirror/state';
 import { yCollab } from 'y-codemirror.next';
 import { fileText, type FileMeta } from '../collab/session';
+import type { LangId } from '../collab/languages';
 
 interface EditorProps {
   doc: Y.Doc;
@@ -23,10 +36,40 @@ interface EditorProps {
   file: FileMeta;
 }
 
-function langExtension(lang: FileMeta['lang']) {
-  if (lang === 'javascript') return javascript({ jsx: true, typescript: true });
-  if (lang === 'python') return python();
-  return [];
+function langExtension(lang: LangId): Extension {
+  switch (lang) {
+    case 'javascript':
+      return javascript({ jsx: true });
+    case 'typescript':
+      return javascript({ jsx: true, typescript: true });
+    case 'python':
+      return python();
+    case 'java':
+      return java();
+    case 'c':
+    case 'cpp':
+      return cpp();
+    case 'rust':
+      return rust();
+    case 'php':
+      return php();
+    case 'html':
+      return html();
+    case 'css':
+      return css();
+    case 'json':
+      return json();
+    case 'markdown':
+      return markdown();
+    case 'xml':
+      return xml();
+    case 'yaml':
+      return yaml();
+    case 'sql':
+      return sql();
+    default:
+      return [];
+  }
 }
 
 export default function Editor({ doc, provider, file }: EditorProps) {

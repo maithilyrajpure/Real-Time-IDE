@@ -36,3 +36,21 @@ services:
       - "1235:1235"
     depends_on:
       - redis
+
+  # Self-hosted code executor for the Run button (Java, C/C++, Python, Rust, …).
+  # JavaScript runs in the browser and needs none of this.
+  #
+  # After `docker compose up`, install the language packs you want, e.g.:
+  #   curl -X POST http://localhost:2000/api/v2/packages -H 'content-type: application/json' -d '{"language":"python","version":"3.10.0"}'
+  #   curl -X POST http://localhost:2000/api/v2/packages -H 'content-type: application/json' -d '{"language":"java","version":"15.0.2"}'
+  # Then point the client at it:  VITE_PISTON_URL=http://localhost:2000/api/v2
+  piston:
+    image: ghcr.io/engineer-man/piston
+    privileged: true
+    ports:
+      - "2000:2000"
+    volumes:
+      - piston_packages:/piston/packages
+
+volumes:
+  piston_packages:

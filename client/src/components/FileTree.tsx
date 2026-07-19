@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import type * as Y from 'yjs';
 import { addFile, type FileMeta } from '../collab/session';
+import { LANG_META } from '../collab/languages';
 
 interface FileTreeProps {
   doc: Y.Doc;
@@ -11,9 +12,7 @@ interface FileTreeProps {
 }
 
 function iconFor(lang: FileMeta['lang']): string {
-  if (lang === 'javascript') return 'JS';
-  if (lang === 'python') return 'PY';
-  return 'TXT';
+  return LANG_META[lang].label;
 }
 
 export default function FileTree({ doc, files, activePath, onSelect }: FileTreeProps) {

@@ -9,13 +9,12 @@
  * Yjs merges across every connected client.
  */
 import * as Y from 'yjs';
-
-export type Lang = 'javascript' | 'python' | 'text';
+import { detectLang, type LangId } from './languages';
 
 export interface FileMeta {
   path: string;
   name: string;
-  lang: Lang;
+  lang: LangId;
 }
 
 export function filesMap(doc: Y.Doc): Y.Map<FileMeta> {
@@ -25,12 +24,6 @@ export function filesMap(doc: Y.Doc): Y.Map<FileMeta> {
 /** The Y.Text holding a file's editable content. */
 export function fileText(doc: Y.Doc, path: string): Y.Text {
   return doc.getText(`content:${path}`);
-}
-
-export function langFromName(name: string): Lang {
-  if (/\.(js|jsx|ts|tsx|mjs|cjs)$/i.test(name)) return 'javascript';
-  if (/\.py$/i.test(name)) return 'python';
-  return 'text';
 }
 
 export function listFiles(doc: Y.Doc): FileMeta[] {
@@ -45,7 +38,7 @@ export function addFile(doc: Y.Doc, name: string): FileMeta {
   const map = filesMap(doc);
   const existing = map.get(path);
   if (existing) return existing;
-  const meta: FileMeta = { path, name: path, lang: langFromName(path) };
+  const meta: FileMeta = { path, name: path, lang: detectLang(path) };
   map.set(path, meta);
   return meta;
 }

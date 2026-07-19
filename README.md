@@ -34,6 +34,26 @@ npm run dev                # runs server (:1234) + client (:5173)
 
 Open http://localhost:5173 in two browser tabs to collaborate.
 
+## Testing live collaboration
+
+1. Run `npm run dev` and open http://localhost:5173.
+2. **Copy the full URL** (e.g. `http://localhost:5173/#default`) into a *second*
+   tab or a different browser (or send it to a friend on your network).
+3. Type in one — text, cursors, and the presence avatars (top-right) update in
+   the other within milliseconds. Each tab gets a random name/color.
+4. Named rooms: change the hash, e.g. `#myroom`. Same hash = same document.
+
+## Running code
+
+Click **▶ Run** in the editor toolbar.
+
+- **JavaScript** executes instantly in a sandboxed Web Worker in the browser —
+  no server needed. `console.log` output shows in the Output panel.
+- **Other languages** (Python, Java, C/C++, Rust, PHP, …) run via
+  [Piston](https://github.com/engineer-man/piston). The public instance now
+  requires auth, so self-host one (included in `docker-compose.yml`) and set
+  `VITE_PISTON_URL`. See [`DEPLOY.md`](./DEPLOY.md).
+
 ### Multi-instance (proving Redis fan-out) — optional
 
 ```bash
