@@ -11,7 +11,7 @@ import * as awarenessProtocol from 'y-protocols/awareness';
 import { Room } from './room.js';
 import { handleMessage, encodeSyncStep1, encodeAwarenessUpdate } from './protocol.js';
 import { createRedisBridge } from './redis.js';
-import { runViaJudge0, judge0Configured } from './run.js';
+import { runProgram, runnerReady } from './run.js';
 
 const PORT = Number(process.env.PORT ?? 1234);
 const REDIS_URL = process.env.REDIS_URL;
@@ -73,7 +73,7 @@ const server = http.createServer(async (req, res) => {
   if (req.url === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(
-      JSON.stringify({ ok: true, rooms: rooms.size, redis: !!redis, run: judge0Configured() })
+      JSON.stringify({ ok: true, rooms: rooms.size, redis: !!redis, run: runnerReady() })
     );
     return;
   }
@@ -101,7 +101,7 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ error: 'language and source are required' }));
         return;
       }
-      const result = await runViaJudge0(body.language, body.filename ?? 'main', body.source);
+      const result = await runProgram(body.language, body.filename ?? 'main', body.source);
       res.writeHead(200, { ...CORS_HEADERS, 'content-type': 'application/json' });
       res.end(JSON.stringify(result));
     } catch (err) {

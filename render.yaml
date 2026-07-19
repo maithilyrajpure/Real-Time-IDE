@@ -19,10 +19,7 @@ services:
           type: keyvalue
           name: rtide-redis
           property: connectionString
-      # RapidAPI key for Judge0 (the Run button). Set this in the Render
-      # dashboard — sync:false keeps the secret out of the repo.
-      - key: JUDGE0_KEY
-        sync: false
+      # The Run button uses Paiza.io (free, keyless) — no secret needed.
 
   # Managed Key Value (Redis) for cross-instance Pub/Sub fan-out.
   - type: keyvalue

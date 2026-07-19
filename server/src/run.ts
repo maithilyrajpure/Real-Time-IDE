@@ -1,26 +1,23 @@
 /**
- * Server-side code execution via Judge0 CE (hosted on RapidAPI).
+ * Server-side code execution via Paiza.io — a free, keyless (api_key=guest)
+ * code-runner. The client POSTs { language, source } to /api/run and we forward
+ * it here. No API key, no card, no signup required.
  *
- * The client POSTs { language, filename, source } to /api/run; we forward it to
- * Judge0 with the RapidAPI key kept here on the server (never shipped to the
- * browser). Judge0's `wait=true` returns the result synchronously.
- *
- * Set JUDGE0_KEY (your RapidAPI key). Optional JUDGE0_HOST defaults to the
- * public Judge0 CE host.
+ * Paiza is asynchronous: create a job, then poll get_details until it completes.
  */
-const JUDGE0_HOST = process.env.JUDGE0_HOST ?? 'judge0-ce.p.rapidapi.com';
-const JUDGE0_KEY = process.env.JUDGE0_KEY;
+const PAIZA_BASE = process.env.PAIZA_URL ?? 'https://api.paiza.io';
+const PAIZA_KEY = process.env.PAIZA_KEY ?? 'guest';
 
-/** Our language ids -> Judge0 CE language ids. */
-const JUDGE0_LANG: Record<string, number> = {
-  javascript: 63, // Node.js
-  typescript: 74,
-  python: 71, // Python 3
-  java: 62, // OpenJDK
-  c: 50, // GCC
-  cpp: 54, // G++
-  rust: 73,
-  php: 68,
+/** Our language ids -> Paiza language names. */
+const PAIZA_LANG: Record<string, string> = {
+  javascript: 'javascript',
+  typescript: 'typescript',
+  python: 'python3',
+  java: 'java',
+  c: 'c',
+  cpp: 'cpp',
+  rust: 'rust',
+  php: 'php',
 };
 
 export interface RunResult {
@@ -30,60 +27,98 @@ export interface RunResult {
   output: string;
 }
 
-export function judge0Configured(): boolean {
-  return !!JUDGE0_KEY;
+/** Paiza needs no key, so execution is always available. */
+export function runnerReady(): boolean {
+  return true;
 }
 
-export async function runViaJudge0(
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+interface PaizaCreate {
+  id?: string;
+  status?: string;
+  error?: string;
+}
+
+interface PaizaDetails {
+  status: string; // "running" | "completed"
+  build_stderr: string | null;
+  build_result: string | null; // "success" | "failure" | null
+  stdout: string | null;
+  stderr: string | null;
+  exit_code: number | null;
+  result: string | null; // "success" | "failure" | "timeout"
+  error?: string;
+}
+
+async function form(path: string, params: Record<string, string>): Promise<Response> {
+  const body = new URLSearchParams(params);
+  return fetch(`${PAIZA_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+}
+
+export async function runProgram(
   language: string,
   _filename: string,
   source: string
 ): Promise<RunResult> {
-  if (!JUDGE0_KEY) {
-    throw new Error('Execution is not configured on the server (missing JUDGE0_KEY).');
-  }
-  const languageId = JUDGE0_LANG[language];
-  if (!languageId) {
-    throw new Error(`Language "${language}" is not supported by the server runner.`);
+  const paizaLang = PAIZA_LANG[language];
+  if (!paizaLang) {
+    throw new Error(`Language "${language}" is not supported by the runner.`);
   }
 
-  const res = await fetch(
-    `https://${JUDGE0_HOST}/submissions?base64_encoded=false&wait=true`,
-    {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'X-RapidAPI-Key': JUDGE0_KEY,
-        'X-RapidAPI-Host': JUDGE0_HOST,
-      },
-      body: JSON.stringify({ language_id: languageId, source_code: source }),
-    }
-  );
+  // 1. Create the job.
+  const created = (await (
+    await form('/runners/create', {
+      source_code: source,
+      language: paizaLang,
+      api_key: PAIZA_KEY,
+    })
+  ).json()) as PaizaCreate;
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Judge0 request failed (HTTP ${res.status}). ${text.slice(0, 200)}`);
+  if (created.error || !created.id) {
+    throw new Error(`Runner rejected the job: ${created.error ?? 'no id returned'}`);
   }
 
-  const data = (await res.json()) as {
-    stdout: string | null;
-    stderr: string | null;
-    compile_output: string | null;
-    message: string | null;
-    status: { id: number; description: string };
-  };
+  // 2. Poll until completed (or give up after ~25s).
+  const deadline = Date.now() + 25_000;
+  let details: PaizaDetails | null = null;
+  while (Date.now() < deadline) {
+    await sleep(1000);
+    const res = await fetch(
+      `${PAIZA_BASE}/runners/get_details?id=${encodeURIComponent(created.id)}&api_key=${PAIZA_KEY}`
+    );
+    details = (await res.json()) as PaizaDetails;
+    if (details.error) throw new Error(`Runner error: ${details.error}`);
+    if (details.status === 'completed') break;
+  }
 
-  const stdout = data.stdout ?? '';
-  // Surface compile errors and runtime stderr together.
-  const stderr = [data.compile_output, data.stderr, data.message]
+  if (!details || details.status !== 'completed') {
+    throw new Error('Execution timed out.');
+  }
+
+  // 3. Shape the result. Build (compile) failures come back in build_stderr.
+  const buildFailed = details.build_result === 'failure';
+  const stdout = details.stdout ?? '';
+  const stderr = [buildFailed ? details.build_stderr : '', details.stderr]
     .filter((s): s is string => !!s && s.trim().length > 0)
     .join('\n');
 
-  // Judge0 status id 3 = "Accepted" (ran, exit 0). Anything else is a failure.
-  const code = data.status.id === 3 ? 0 : 1;
+  // Paiza returns exit_code as a string ("0"); coerce so the client compares it
+  // as a number.
+  const code = buildFailed
+    ? 1
+    : details.exit_code != null
+      ? Number(details.exit_code)
+      : details.result === 'success'
+        ? 0
+        : 1;
   const output =
     [stdout, stderr].filter(Boolean).join('\n').trimEnd() ||
-    `(${data.status.description})`;
+    `(${details.result ?? 'no output'})`;
 
   return { stdout, stderr, code, output };
 }
