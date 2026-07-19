@@ -11,6 +11,7 @@ import * as awarenessProtocol from 'y-protocols/awareness';
 import { Room } from './room.js';
 import { handleMessage, encodeSyncStep1, encodeAwarenessUpdate } from './protocol.js';
 import { createRedisBridge } from './redis.js';
+import { runViaJudge0, judge0Configured } from './run.js';
 
 const PORT = Number(process.env.PORT ?? 1234);
 const REDIS_URL = process.env.REDIS_URL;
@@ -43,13 +44,73 @@ function roomNameFromUrl(url: string | undefined): string {
   return decodeURIComponent(path) || 'default';
 }
 
-// --- HTTP server (health + info) ---------------------------------------------
-const server = http.createServer((req, res) => {
+// --- HTTP server (health + code execution) -----------------------------------
+const CORS_HEADERS = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-methods': 'POST, OPTIONS',
+  'access-control-allow-headers': 'content-type',
+};
+
+function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    let raw = '';
+    req.on('data', (chunk) => {
+      raw += chunk;
+      if (raw.length > 1_000_000) reject(new Error('Body too large')); // 1 MB cap
+    });
+    req.on('end', () => {
+      try {
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch {
+        reject(new Error('Invalid JSON body'));
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+const server = http.createServer(async (req, res) => {
   if (req.url === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, rooms: rooms.size, redis: !!redis }));
+    res.end(
+      JSON.stringify({ ok: true, rooms: rooms.size, redis: !!redis, run: judge0Configured() })
+    );
     return;
   }
+
+  // Code execution endpoint (used by the client's Run button in production).
+  if (req.url === '/api/run') {
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, CORS_HEADERS);
+      res.end();
+      return;
+    }
+    if (req.method !== 'POST') {
+      res.writeHead(405, CORS_HEADERS);
+      res.end();
+      return;
+    }
+    try {
+      const body = (await readJsonBody(req)) as {
+        language?: string;
+        filename?: string;
+        source?: string;
+      };
+      if (!body.language || typeof body.source !== 'string') {
+        res.writeHead(400, { ...CORS_HEADERS, 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: 'language and source are required' }));
+        return;
+      }
+      const result = await runViaJudge0(body.language, body.filename ?? 'main', body.source);
+      res.writeHead(200, { ...CORS_HEADERS, 'content-type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      res.writeHead(502, { ...CORS_HEADERS, 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+    }
+    return;
+  }
+
   res.writeHead(200, { 'content-type': 'text/plain' });
   res.end('Real-time IDE collaboration server. Connect over WebSocket.');
 });
