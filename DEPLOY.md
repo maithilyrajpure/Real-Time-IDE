@@ -26,7 +26,8 @@ Two pieces deploy separately:
    `wss://rtide-server.onrender.com`.
 
 Health check: `https://rtide-server.onrender.com/health` →
-`{"ok":true,"rooms":N,"redis":true}` (`redis:true` confirms fan-out is active).
+`{"ok":true,"rooms":N,"redis":true,"run":true}` — `redis:true` confirms fan-out
+is active, `run:true` confirms the Run button's executor is reachable.
 
 ## 2. Deploy the client on Vercel
 
@@ -39,7 +40,18 @@ Health check: `https://rtide-server.onrender.com/health` →
 Open the deployed URL in two browsers to collaborate. Add `#anyroom` to the URL
 to create/join a named room.
 
-## 3. Scaling (the point of Redis)
+## 3. Code execution (the Run button)
+
+Works in production with **no configuration**. The server's `/api/run` endpoint
+forwards non-JavaScript code to [Paiza.io](https://paiza.io)'s free, keyless
+runner — no API key, no secret, no card. JavaScript runs in the browser and
+needs nothing at all.
+
+If you'd rather use your own executor, set `PAIZA_URL` / `PAIZA_KEY` on the
+server, or self-host [Piston](https://github.com/engineer-man/piston) and point
+the client's `VITE_PISTON_URL` at it.
+
+## 4. Scaling (the point of Redis)
 
 Because every edit fans out through Redis Pub/Sub, you can raise the server's
 instance count in Render and users on **different** instances stay in sync. To
